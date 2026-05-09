@@ -1,17 +1,84 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>محلل الذهب</title>
+<title>محلل الذهب XAU/USD</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0f;font-family:Cairo,sans-serif;direction:rtl;color:#e8e0cc;min-height:100vh;padding:24px 16px}
+.card{background:#1a1a24;border:1px solid #2a2a3a;border-radius:20px;padding:24px;margin-bottom:20px}
+.gold{color:#f0c040}
+.btn{padding:8px 20px;border-radius:20px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:Cairo,sans-serif;background:linear-gradient(135deg,#c9a227,#f0c040);color:#0a0a0f}
+.btn:disabled{background:#333;color:#666;cursor:not-allowed}
+</style>
 </head>
-<body style="margin:0;padding:0;background:#0a0a0f">
+<body>
 <div id="root"></div>
-<script type="text/babel" src="./App.jsx"></script>
+<script type="text/babel">
+const {useState,useEffect,useCallback}=React;
+const PROMPT=`أنت محلل فوركس متخصص في الذهب XAU/USD. قدم: 1.اتجاه السوق 2.مستويات الدعم 3.مستويات المقاومة 4.ال
+توصية مع السبب 5.نقطة الدخول 6.وقف الخسارة 7.الهدف. استخدم الأرقام الفعلية. الرد بالعربية فقط.`;function App(){
+const [price,setPrice]=useState(null);
+const [analysis,setAnalysis]=useState("");
+const [loading,setLoading]=useState(false);
+const [lastUpdate,setLastUpdate]=useState(null);
+const [countdown,setCountdown]=useState(3600);
+
+const getPrice=useCallback(async()=>{
+try{
+const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:"What is the current gold XAU/USD price? Reply with only the number like 3245.50"}]})});
+const d=await r.json();
+const t=d.content?.map(i=>i.text||"").join("")||"";
+const m=t.match(/[\d,]+\.?\d*/);
+if(m){const p=parseFloat(m[0].replace(",",""));setPrice(p);setLastUpdate(new Date());return p;}
+}catch(e){return null;}
+},[]);
+
+const getAnalysis=useCallback(async(p)=>{
+if(!p)return;
+setLoading(true);setAnalysis("");
+try{
+const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:PROMPT,messages:[{role:"user",content:`السعر الحالي: $${p}\nالوقت: ${new Date().toLocaleString("ar-SA")}\nحلل السوق وأعطني توصية واضحة.`}]})});
+const d=await r.json();
+setAnalysis(d.content?.map(i=>i.text||"").join("")||"لا يوجد تحليل.");
+}catch(e){setAnalysis("حدث خطأ.");}
+finally{setLoading(false);}
+},[]);
+
+const update=useCallback(async()=>{const p=await getPrice();if(p)await getAnalysis(p);setCountdown(3600);},[getPrice,getAnalysis]);
+useEffect(()=>{update();},[]);
+useEffect(()=>{const t=setInterval(()=>{setCountdown(p=>{if(p<=1){update();return 3600;}return p-1;});},1000);return()=>clearInterval(t);},[update]);
+const fmt=(s)=>`${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")
+                                    }`;return(
+<div>
+<div style={{textAlign:"center",marginBottom:32}}>
+<h1 style={{fontSize:36,fontWeight:900,background:"linear-gradient(90deg,#c9a227,#f0c040)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>⬡ XAU / USD</h1>
+<div style={{fontSize:12,color:"#555"}}>تحليل تلقائي كل ساعة • دعم ومقاومة</div>
+</div>
+<div className="card">
+<div style={{fontSize:12,color:"#666",marginBottom:4}}>السعر الحالي</div>
+<div style={{fontSize:42,fontWeight:900,color:"#f0c040"}}>{price?`$${price.toLocaleString("en-US",{minimumFractionDigits:2})}`:"جاري الجلب..."}</div>
+{lastUpdate&&<div style={{fontSize:11,color:"#555",marginTop:4}}>آخر تحديث: {lastUpdate.toLocaleTimeString("ar-SA")}</div>}
+<div style={{marginTop:16,display:"flex",alignItems:"center",gap:12}}>
+<div style={{fontSize:18,fontWeight:700,color:"#f0c040"}}>⏱ {fmt(countdown)}</div>
+<button className="btn" onClick={update} disabled={loading}>{loading?"⏳ جاري...":"🔄 تحديث"}</button>
+</div>
+</div>
+<div className="card">
+<div style={{fontWeight:700,fontSize:15,marginBottom:16,color:"#f0c040"}}>📊 التحليل الذكي</div>
+{loading?<div style={{textAlign:"center",padding:"32px 0",color:"#666"}}>⏳ جاري التحليل...</div>
+:analysis?<div style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{analysis}</div>
+:<div style={{textAlign:"center",padding:"32px 0",color:"#555"}}>اضغط تحديث لبدء التحليل</div>}
+</div>
+</div>
+);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
